@@ -1,0 +1,5 @@
+/bitrix/*
+/.idea/*
+/upload/*
+/local/vendor/*
+test*.php

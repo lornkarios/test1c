@@ -1,0 +1,11 @@
+{
+
+    "autoload": {
+        "psr-4": {
+            "Test1c\\": "class"
+        }
+    },
+    "require": {
+        "twbs/bootstrap": "4.4.1"
+    }
+}
