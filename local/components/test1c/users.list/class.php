@@ -26,41 +26,118 @@ class UsersList extends CBitrixComponent
         $this->arResult['componentId'] = $this->arParams['componentId'];
 
         if (isset($_POST['componentId']) && $_POST['componentId'] == $this->arResult['componentId']) {
-            global $APPLICATION;
-            $APPLICATION->RestartBuffer();
-
-
             $usersCount = UserTable::getCount();
-            $pagesCount = (int)($usersCount / $this->countOnPage);
-            if ($usersCount % $this->countOnPage != 0) {
-                $pagesCount++;
-            }
+            $oneStepIteration = 2000;//сколько пользователей мы будем выгружать за одну итерацию импорта
 
-            $curPageNum = $_POST['pageNum'];
-            switch ($_POST['action']) {
-                case 'prevPage':
-                    if ($curPageNum != 1) {
-                        $linkPageNum = $curPageNum - 1;
-                    }
-                    break;
-                case 'nextPage':
-                    if ($curPageNum != $pagesCount) {
-                        $linkPageNum = $curPageNum + 1;
-                    }
-                    break;
-                case 'linkPage':
-                    if (($curPageNum >= 1)&&($curPageNum <= $pagesCount)) {
-                        $linkPageNum = $curPageNum;
-                    }
-                    break;
-            }
-            if($linkPageNum) {
-                $this->arResult['users'] = $this->prepareUsers($linkPageNum);
-                $this->arResult['paginationHtml'] = $this->preparePaginationString($linkPageNum, UserTable::getCount());
-                $this->IncludeComponentTemplate();
-            }
-            die();
 
+            if (isset($_POST['documentType']) && ($documentType = $_POST['documentType'])) {
+
+
+                $curStep = (int)$_POST['curStep'];
+                $maxStepCount = (int)($usersCount / $oneStepIteration);
+                if ($usersCount % $oneStepIteration != 0) {
+                    $maxStepCount++;
+                }
+
+                if ($curStep == 0) {
+
+                    $jsonResult['maxStepCount'] = $maxStepCount;
+
+
+                    $documentPath =  '/upload/importFiles/';
+                    if (!is_dir($_SERVER['DOCUMENT_ROOT'] .$documentPath)) {
+                        mkdir($_SERVER['DOCUMENT_ROOT'] .$documentPath);
+                    }
+                    $documentPath .= uniqid() . '/';
+                    mkdir($_SERVER['DOCUMENT_ROOT'] .$documentPath);
+
+                    $documentPath .= uniqid() . '.' . $documentType;
+                    if ($documentType == 'xml') {
+                        file_put_contents(
+                            $_SERVER['DOCUMENT_ROOT'] .$documentPath,
+                            '<?xml version="1.0" encoding="UTF-8"?>
+                                <users>'
+                        );
+
+                    } else {
+                        file_put_contents($_SERVER['DOCUMENT_ROOT'] .$documentPath, '');
+
+                    }
+
+                    $jsonResult['documentName'] = $documentPath;
+                } else {
+                    $documentPath = $_SERVER['DOCUMENT_ROOT'] .$_POST['documentName'];
+                }
+
+                $users = $this->prepareUsersForImport($curStep, $oneStepIteration);
+
+                switch ($documentType) {
+                    case 'xml':
+                        $xmlUsers = $this->convertUsersToXml($users);
+                        file_put_contents($documentPath, $xmlUsers, FILE_APPEND);
+                        break;
+                    case 'csv':
+                        $csvUsers = $this->convertUsersToCsv($users);
+                        file_put_contents($documentPath, $csvUsers, FILE_APPEND);
+                        break;
+                }
+
+                if (($curStep == ($maxStepCount - 1)) && ($documentType == 'xml')) {
+
+                    file_put_contents(
+                        $documentPath,
+                        '</users>', FILE_APPEND
+                    );
+
+
+                }
+                $jsonResult['success'] = true;
+
+                $curStep++;
+                $jsonResult['curStep'] = $curStep;
+
+                global $APPLICATION;
+                $APPLICATION->RestartBuffer();
+
+                echo json_encode($jsonResult, JSON_UNESCAPED_UNICODE);
+
+                die();
+            } else {
+
+                global $APPLICATION;
+                $APPLICATION->RestartBuffer();
+
+
+                $pagesCount = (int)($usersCount / $this->countOnPage);
+                if ($usersCount % $this->countOnPage != 0) {
+                    $pagesCount++;
+                }
+
+                $curPageNum = $_POST['pageNum'];
+                switch ($_POST['action']) {
+                    case 'prevPage':
+                        if ($curPageNum != 1) {
+                            $linkPageNum = $curPageNum - 1;
+                        }
+                        break;
+                    case 'nextPage':
+                        if ($curPageNum != $pagesCount) {
+                            $linkPageNum = $curPageNum + 1;
+                        }
+                        break;
+                    case 'linkPage':
+                        if (($curPageNum >= 1) && ($curPageNum <= $pagesCount)) {
+                            $linkPageNum = $curPageNum;
+                        }
+                        break;
+                }
+                if ($linkPageNum) {
+                    $this->arResult['users'] = $this->prepareUsers($linkPageNum);
+                    $this->arResult['paginationHtml'] = $this->preparePaginationString($linkPageNum, UserTable::getCount());
+                    $this->IncludeComponentTemplate();
+                }
+                die();
+            }
         } else {
 
             $this->arResult['users'] = $this->prepareUsers(1);
@@ -81,13 +158,30 @@ class UsersList extends CBitrixComponent
      */
     private function prepareUsers(int $pageNum): array
     {
+
+
+        return $this->prepareUsersForImport($pageNum - 1, $this->countOnPage);
+
+
+    }
+
+    /**
+     * @param int $curStep
+     * @param int $oneStepIteration
+     * @return array
+     * @throws \Bitrix\Main\ArgumentException
+     * @throws \Bitrix\Main\ObjectPropertyException
+     * @throws \Bitrix\Main\SystemException
+     */
+    private function prepareUsersForImport(int $curStep, int $oneStepIteration): array
+    {
         $userDb = UserTable::getList(
             [
                 'order' => ['ID'],
                 'select' => ['NAME', 'EMAIL'],
                 'filter' => ['ACTIVE' => 'Y'],
-                'limit' => $this->countOnPage,
-                'offset' => $this->countOnPage * ($pageNum - 1)
+                'limit' => $oneStepIteration,
+                'offset' => $oneStepIteration * $curStep
             ]
         );
 
@@ -168,14 +262,6 @@ class UsersList extends CBitrixComponent
 
 
     /**
-     * @return int
-     */
-    private function getCountOnPage(): int
-    {
-        return $this->countOnPage;
-    }
-
-    /**
      * @param int $countOnPage
      */
     private function setCountOnPage(int $countOnPage): void
@@ -184,4 +270,25 @@ class UsersList extends CBitrixComponent
     }
 
 
+    private function convertUsersToCsv(array $users): string
+    {
+        $csvUsers = '';
+        foreach ($users as $user) {
+            $csvUsers .= $user['NAME'] . '|' . $user['EMAIL'] . PHP_EOL;
+        }
+        return $csvUsers;
+    }
+
+    private function convertUsersToXml(array $users): string
+    {
+        $xmlUsers = '';
+        foreach ($users as $user) {
+            $xmlUsers .=
+                '<user>
+                    <email>' . $user['EMAIL'] . '</email>
+                    <name>' . $user['NAME'] . '</name>
+                </user>';
+        }
+        return $xmlUsers;
+    }
 }
