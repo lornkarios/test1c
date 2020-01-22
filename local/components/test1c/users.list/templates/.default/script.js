@@ -95,7 +95,7 @@ class UsersList {
                 var a = document.createElement("a");
 
                 a.href = documentName;
-                a.download = '';
+                a.download = 'users.'+documentType;
                 a.click();
             }
 

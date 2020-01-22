@@ -3,3 +3,4 @@
 /upload/*
 /local/vendor/*
 test*.php
+/local/composer.phar
