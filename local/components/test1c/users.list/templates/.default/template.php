@@ -57,7 +57,18 @@ $this->setFrameMode(true);
 
 
                 <!--        pagenavigation   -->
-                <?= $arResult['paginationHtml'] ?>
+                <?
+                $APPLICATION->IncludeComponent(
+                    "bitrix:main.pagenavigation",
+                    "main",
+                    array(
+                        "NAV_OBJECT" => $arResult['paginationObject'],
+                        "SEF_MODE" => "Y",
+                        "SHOW_COUNT" => "N",
+                    ),
+                    false
+                );
+                ?>
 
             </div>
         </div>
